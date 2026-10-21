@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   Upload,
   AlertTriangle,
@@ -15,8 +15,6 @@ import {
 import { toast } from "sonner";
 import { useEmployeeStore } from "@/stores/employees";
 import { sha256Hex } from "@/lib/zk/hash";
-import { findDuplicateReferenceIds } from "@/lib/validation/duplicateReferenceId";
-import DuplicateReferenceWarning from "@/components/employees/DuplicateReferenceWarning";
 import { ImportConflictResolver } from "./ImportConflictResolver";
 import type { Employee } from "@/types";
 
@@ -28,8 +26,6 @@ export interface CsvRow {
   address: string;
   salary: string;
   startDate: string;
-  /** Optional employee reference id (issue #431). Blank when absent. */
-  referenceId: string;
 }
 
 interface RowValidationError {
@@ -39,12 +35,11 @@ interface RowValidationError {
 }
 
 const REQUIRED_COLUMNS = ["name", "address", "salary", "start_date"];
-const OPTIONAL_COLUMNS = ["email", "department", "employee_id"];
+const OPTIONAL_COLUMNS = ["email", "department"];
 
-const CSV_TEMPLATE_HEADER =
-  "name,email,department,address,salary,start_date,employee_id";
+const CSV_TEMPLATE_HEADER = "name,email,department,address,salary,start_date";
 const CSV_TEMPLATE_ROW =
-  "Jane Doe,jane@company.io,Engineering,GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37,5000,2025-06-01,EMP-001";
+  "Jane Doe,jane@company.io,Engineering,GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37,5000,2025-06-01";
 
 function parseCsv(text: string): CsvRow[] {
   const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
@@ -59,12 +54,6 @@ function parseCsv(text: string): CsvRow[] {
   const addrIdx = headers.indexOf("address");
   const salaryIdx = headers.indexOf("salary");
   const startIdx = headers.indexOf("start_date");
-  // Optional employee reference id. Either spelling is accepted; files without
-  // the column parse exactly as before (issue #431).
-  const refIdx = Math.max(
-    headers.indexOf("employee_id"),
-    headers.indexOf("reference_id"),
-  );
 
   if (nameIdx === -1 || addrIdx === -1 || salaryIdx === -1) {
     return [];
@@ -82,7 +71,6 @@ function parseCsv(text: string): CsvRow[] {
       address: values[addrIdx]?.trim() ?? "",
       salary: values[salaryIdx]?.trim() ?? "",
       startDate: startIdx >= 0 ? (values[startIdx]?.trim() ?? "") : "",
-      referenceId: refIdx >= 0 ? (values[refIdx]?.trim() ?? "") : "",
     });
   }
 
@@ -201,18 +189,11 @@ export default function CsvImport() {
     RowValidationError[]
   >([]);
   const [fileName, setFileName] = useState<string>("");
+  const [sourceColumns, setSourceColumns] = useState<string[]>([]);
   const [importingRow, setImportingRow] = useState<number | null>(null);
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
   const [allImported, setAllImported] = useState(false);
   const [showConflictResolver, setShowConflictResolver] = useState(false);
-
-  // Issue #431 — the same employee reference id appearing on more than one row
-  // of the onboarding input. Computed from the parsed rows so it refreshes
-  // with them and is impossible to forget after a re-parse.
-  const duplicateReferenceIds = useMemo(
-    () => findDuplicateReferenceIds(parsedRows),
-    [parsedRows],
-  );
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,6 +204,11 @@ export default function CsvImport() {
       const reader = new FileReader();
       reader.onload = () => {
         const text = reader.result as string;
+        const columns = (text.split(/\r?\n/, 1)[0] ?? "")
+          .split(",")
+          .map((column) => column.trim().toLowerCase())
+          .filter(Boolean);
+        setSourceColumns(columns);
         const rows = parseCsv(text);
 
         if (rows.length === 0) {
@@ -243,17 +229,6 @@ export default function CsvImport() {
         setParsedRows(rows);
         setValidationErrors(allErrors);
         setImportedIds(new Set());
-
-        const duplicateRefs = findDuplicateReferenceIds(rows);
-        if (duplicateRefs.length > 0) {
-          toast.warning(
-            `${duplicateRefs.length} duplicate employee reference id${duplicateRefs.length !== 1 ? "s" : ""} in this file`,
-            {
-              description:
-                "Resolve them before importing so each employee keeps one reference id.",
-            },
-          );
-        }
 
         const errorCount = allErrors.filter(
           (e) => e.field !== "email" || allErrors.length <= 2,
@@ -348,6 +323,7 @@ export default function CsvImport() {
     setParsedRows([]);
     setValidationErrors([]);
     setFileName("");
+    setSourceColumns([]);
     setImportedIds(new Set());
     setAllImported(false);
     if (fileInputRef.current) {
@@ -490,11 +466,25 @@ export default function CsvImport() {
             </div>
           )}
 
-          {duplicateReferenceIds.length > 0 && (
-            <div className="px-4 sm:px-6 py-3 border-b border-amber-100">
-              <DuplicateReferenceWarning duplicates={duplicateReferenceIds} />
-            </div>
-          )}
+          <section
+            aria-label="Import source validation summary"
+            className="mx-4 my-3 rounded-md border border-gray-200 bg-gray-50 px-4 py-3 sm:mx-6"
+          >
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-700">
+              Source validation summary
+            </h4>
+            <p className="mt-1 text-xs text-gray-600">
+              {fileName}: {parsedRows.length} rows checked, {validRowCount} ready to import, {parsedRows.length - validRowCount} need attention.
+            </p>
+            <p className="mt-1 text-xs text-gray-600">
+              Required columns: {REQUIRED_COLUMNS.map((column) => `${column} ${sourceColumns.includes(column) ? "✓" : "missing"}`).join(" · ")}
+            </p>
+            {REQUIRED_COLUMNS.some((column) => !sourceColumns.includes(column)) && (
+              <p role="alert" className="mt-1 text-xs text-red-700">
+                The source is missing required columns. Correct the CSV headings before importing.
+              </p>
+            )}
+          </section>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left">

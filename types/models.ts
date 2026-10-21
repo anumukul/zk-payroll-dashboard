@@ -171,30 +171,6 @@ export interface PayrollTransaction {
   proof: string;
   status: "pending" | "verified" | "failed" | "cancelled";
   reconciliationStatus?: ReconciliationStatus;
-  approvalStatus?:
-    | "draft"
-    | "pending_executive_approval"
-    | "approved"
-    | "rejected"
-    | "correction_requested";
-  approvalHistory?: Array<{
-    approvedBy: string;
-    approvedAt: string;
-    role: string;
-    comment?: string;
-    action?: "approved" | "rejected" | "correction_requested" | "resubmitted";
-  }>;
-  txHash?: string;
-  isArchived?: boolean;
-}
-
-export interface PayrollRun extends PayrollTransaction {
-  employeeIds: string[];
-  /** Settlement-service receipt identifier; absent until settlement completes. */
-  receiptId?: string | null;
-  executedAt?: string | null;
-  transactionHash?: string | null;
-  reconciliationStatus?: "pending" | "partial" | "complete" | "failed";
   reconciliationDetails?: {
     processedCount: number;
     totalCount: number;
@@ -834,7 +810,7 @@ export interface WalletRotationWarning {
   type: "cooldown_active" | "payroll_blocker" | "pending_approval";
   message: string;
   severity: "info" | "warning" | "critical";
-  }
+}
 
 // ─── Compliance Evidence Pointer Manager (#338) ──────────────────────────────
 

@@ -1,7 +1,16 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type DraftStatus = "draft" | "recovering" | "recovered" | "expired" | "discarded";
+export type DraftStatus = "draft" | "recovering" | "recovered" | "expired" | "discarded" | "pending_approval";
+
+export interface ApprovalSnapshot {
+  draftId: string;
+  employeeIds: string[];
+  totalAmount: number;
+  payPeriod: string;
+  currency: string;
+  capturedAt: string;
+}
 
 export interface PayrollDraft {
   id: string;
@@ -18,6 +27,8 @@ export interface PayrollDraft {
   recoveryToken?: string;
   error?: string;
   metadata?: Record<string, unknown>;
+  approvalSnapshot?: ApprovalSnapshot;
+  approvalLockedAt?: string;
 }
 
 export type DraftSortField = "updatedAt" | "createdAt" | "expiresAt" | "totalAmount";
@@ -34,6 +45,7 @@ interface PayrollDraftsStore {
 
   addDraft: (draft: Omit<PayrollDraft, "id" | "createdAt" | "updatedAt" | "expiresAt" | "status">) => PayrollDraft;
   updateDraft: (id: string, updates: Partial<PayrollDraft>) => void;
+  lockForApproval: (id: string) => PayrollDraft | null;
   removeDraft: (id: string) => void;
   setActiveDraft: (id: string | null) => void;
   recoverDraft: (id: string) => void;
@@ -86,11 +98,41 @@ export const usePayrollDraftsStore = create<PayrollDraftsStore>()(
       updateDraft: (id, updates) =>
         set((state) => ({
           drafts: state.drafts.map((d) =>
-            d.id === id
+            d.id === id && !d.approvalLockedAt
               ? { ...d, ...updates, updatedAt: new Date().toISOString() }
               : d
           ),
         })),
+      lockForApproval: (id) => {
+        let locked: PayrollDraft | null = null;
+        set((state) => ({
+          drafts: state.drafts.map((draft) => {
+            if (draft.id !== id) return draft;
+            if (draft.approvalSnapshot) {
+              locked = draft;
+              return draft;
+            }
+            const capturedAt = new Date().toISOString();
+            const next = {
+              ...draft,
+              status: "pending_approval" as DraftStatus,
+              approvalLockedAt: capturedAt,
+              approvalSnapshot: {
+                draftId: draft.id,
+                employeeIds: [...draft.employeeIds].sort(),
+                totalAmount: draft.totalAmount,
+                payPeriod: draft.payPeriod,
+                currency: draft.currency,
+                capturedAt,
+              },
+              updatedAt: capturedAt,
+            };
+            locked = next;
+            return next;
+          }),
+        }));
+        return locked;
+      },
       removeDraft: (id) =>
         set((state) => ({
           drafts: state.drafts.filter((d) => d.id !== id),
