@@ -1,3 +1,15 @@
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import TreasuryReserveSettings from "@/components/features/settings/TreasuryReserveSettings";
+
+function SettingsPage() {
+  return (
+    <DashboardLayout>
+      <TreasuryReserveSettings />
+    </DashboardLayout>
+  );
+}
+
+export default SettingsPage;
 import Link from "next/link";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Sliders, Building2, Landmark, Shield, Globe2, ArrowRight } from "lucide-react";

@@ -27,6 +27,11 @@ import type { Employee } from "@/types/models";
 import DuplicateWarningPanel from "@/components/employees/DuplicateWarningPanel";
 import { usePayrollWizardStore } from "@/stores/payrollWizard";
 import { useWalletStore } from "@/stores/walletStore";
+import { useTreasuryReserveStore } from "@/stores/treasuryReserve";
+import { evaluateTreasuryReserve } from "@/lib/treasury/reserveConfig";
+import { EXPECTED_NETWORK } from "@/components/providers/StellarProvider";
+import { IncidentBanner } from "@/components/ui/IncidentBanner";
+import { MOCK_COMPANIES, MOCK_EMPLOYEES, MOCK_PAYROLL_RUNS, MOCK_TREASURY_BALANCE } from "@/lib/api/mockData";
 import { useApprovalHistory } from "@/stores/approvalHistory";
 import { useSession } from "@/hooks/useSession";
 import { IncidentBanner } from "@/components/ui/IncidentBanner";
@@ -980,10 +985,19 @@ function ConfirmStep({
   const payoutLimit = getPayoutLimitStatus(selectedEmployees.length, maxBatchSize);
 
   const { isProofNearingExpiration, treasuryBalanceOverride } = store;
+  const reserveThreshold = useTreasuryReserveStore((s) => s.reserveThreshold);
+  const treasuryBalance = treasuryBalanceOverride !== null && treasuryBalanceOverride !== undefined 
+    ? treasuryBalanceOverride 
+    : MOCK_TREASURY_BALANCE.balance;
   const treasuryBalance =
     treasuryBalanceOverride !== null && treasuryBalanceOverride !== undefined
       ? treasuryBalanceOverride
       : MOCK_TREASURY_BALANCE.balance;
+
+  const reserve = useMemo(
+    () => evaluateTreasuryReserve({ balance: treasuryBalance, payrollTotal: totalAmount, threshold: reserveThreshold }),
+    [treasuryBalance, totalAmount, reserveThreshold],
+  );
 
   const currentPeriod = useMemo(() => {
     const d = new Date();

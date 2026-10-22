@@ -19,6 +19,7 @@ import { hasSupportedPayrollAssets } from "@/lib/assets/supportedAssets";
 
 function TreasuryView({ configuredAssets }: { configuredAssets?: Array<{ code: string; issuer?: string }> } = {}) {
   const [toastVisible, setToastVisible] = useState(false);
+  const reserveThreshold = useTreasuryReserveStore((s) => s.reserveThreshold);
 
   // Demo wiring: if no assets passed, treat treasury address presence as "configured"
   // When MOCK_COMPANIES has treasury but assets list is empty, show empty state for QA.
@@ -107,6 +108,9 @@ function TreasuryView({ configuredAssets }: { configuredAssets?: Array<{ code: s
               {isLowBalance ? "Deficit after payroll" : "Surplus after payroll"}
             </span>
           </div>
+          <span className="text-xs text-gray-500 mt-1 block">
+            Required reserve: {formatReserveThreshold(reserveThreshold)}
+          </span>
         </article>
       </div>
 
